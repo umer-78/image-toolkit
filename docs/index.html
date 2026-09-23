@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>imgkit — Image Processing Demo</title>
+  <meta name="description" content="Interactive demo of imgkit: 2D convolution, Gaussian blur, Sobel edges, median filter and Otsu threshold — all on canvas in your browser.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><text x='16' y='23' font-size='16' text-anchor='middle' fill='white' font-family='monospace'>IK</text></svg>">
+  <style>
+    :root {
+      --bg: #f6f7f9; --surface: #ffffff; --surface-2: #eef0f4; --border: #dde1e8;
+      --text: #16181d; --muted: #5d6573; --accent: #2563eb; --accent-ink: #ffffff;
+      --good: #15803d; --bad: #b91c1c; --warn: #d97706;
+      --radius: 12px;
+      --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 4px 16px rgb(16 24 40 / 0.05);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e1116; --surface: #161a21; --surface-2: #1d222b; --border: #2a303b;
+        --text: #e8eaee; --muted: #9aa3b2; --accent: #60a5fa; --accent-ink: #0b1220;
+        --good: #4ade80; --bad: #f87171; --warn: #fbbf24;
+        --shadow: none; color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+    header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    header.top h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+    header.top p { margin: 2px 0 0; color: var(--muted); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); min-width: 0; margin-bottom: 16px; }
+    .card h2 { font-size: 15px; margin: 0 0 12px; }
+    .grid { display: grid; gap: 16px; }
+    .grid.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    input, select, textarea, button { font: inherit; color: inherit; }
+    input, select {
+      width: 100%; padding: 9px 11px; border-radius: 9px;
+      border: 1px solid var(--border); background: var(--surface-2); outline: none; min-width: 0;
+    }
+    input[type="range"] { padding: 0; border: none; background: transparent; }
+    input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button {
+      cursor: pointer; border: 1px solid var(--border); background: var(--surface-2);
+      padding: 9px 14px; border-radius: 9px; font-weight: 600;
+    }
+    button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+    .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+    .row > * { flex: 1 1 160px; }
+    .row > button, .row > .filebtn { flex: 0 0 auto; }
+    .muted { color: var(--muted); }
+    .mono { font-family: var(--mono); }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+    .filters button { font-size: 13px; font-weight: 500; }
+    .filters button.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
+    .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 640px) { .panes { grid-template-columns: 1fr; } }
+    .pane { min-width: 0; }
+    .pane h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+    .pane canvas, .pane img {
+      width: 100%; height: auto; display: block; border-radius: 10px;
+      border: 1px solid var(--border); background:
+        repeating-conic-gradient(var(--surface-2) 0% 25%, var(--surface) 0% 50%) 50% / 16px 16px;
+      image-rendering: pixelated;
+    }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+    .stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .stat .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .stat .v { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 2px; word-break: break-all; }
+    .filebtn { display: inline-block; }
+    .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .filebtn span {
+      display: inline-block; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2);
+      padding: 9px 14px; border-radius: 9px; font-weight: 600;
+    }
+    .filebtn input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .presets button { font-size: 13px; padding: 5px 10px; font-weight: 500; }
+    footer { margin-top: 32px; color: var(--muted); font-size: 13px; text-align: center; }
+    code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+    .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .table-wrap { overflow-x: auto; }
+    .ctrl { margin-top: 8px; }
+    .ctrl .val { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <h1>imgkit — Image Processing, Written Out</h1>
+        <p>2D convolution, Gaussian &amp; median filters, Sobel edges, Otsu threshold — NumPy-free JS on canvas, before/after side by side.</p>
+      </div>
+      <a href="https://github.com/umer-78/image-toolkit">Source on GitHub</a>
+    </header>
+
+    <section class="card">
+      <h2>Source image</h2>
+      <div class="row">
+        <div class="filebtn">
+          <input type="file" id="fileIn" accept="image/*" aria-label="Upload image">
+          <span>Upload image…</span>
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="sampleBtn" type="button">Regenerate sample</button>
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="noiseBtn" type="button">Add salt &amp; pepper</button>
+        </div>
+        <div>
+          <label for="maxDim">Max working size (px)</label>
+          <input id="maxDim" type="number" min="64" max="640" step="32" value="320">
+        </div>
+      </div>
+      <p class="note">Sample is a fixed-seed procedural scene (shapes + gradients) so every run is comparable — same idea as <code>tools/make_images.py</code>.</p>
+    </section>
+
+    <section class="card">
+      <h2>Apply a filter</h2>
+      <div class="filters" role="toolbar" aria-label="Filters">
+        <button type="button" data-f="none" class="active">Original</button>
+        <button type="button" data-f="grayscale">Grayscale</button>
+        <button type="button" data-f="blur">Gaussian blur</button>
+        <button type="button" data-f="median">Median 3×3</button>
+        <button type="button" data-f="sharpen">Sharpen</button>
+        <button type="button" data-f="sobel">Sobel edges</button>
+        <button type="button" data-f="edges">Canny-style edges</button>
+        <button type="button" data-f="otsu">Otsu threshold</button>
+        <button type="button" data-f="equalize">Equalise</button>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="sigma">Gaussian σ <span class="val" id="sigmaVal">1.5</span></label>
+          <input type="range" id="sigma" min="0.5" max="4" step="0.1" value="1.5">
+        </div>
+        <div>
+          <label for="low">Edge low <span class="val" id="lowVal">0.10</span></label>
+          <input type="range" id="low" min="0.02" max="0.5" step="0.01" value="0.1">
+        </div>
+        <div>
+          <label for="high">Edge high <span class="val" id="highVal">0.25</span></label>
+          <input type="range" id="high" min="0.05" max="0.8" step="0.01" value="0.25">
+        </div>
+        <div style="flex:0 0 auto">
+          <button class="primary" id="applyBtn" type="button">Apply</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="k">Filter</div><div class="v" id="statFilter">original</div></div>
+        <div class="stat"><div class="k">Kernel</div><div class="v" id="statKernel">—</div></div>
+        <div class="stat"><div class="k">Multiply counts</div><div class="v" id="statMult">—</div></div>
+        <div class="stat"><div class="k">Wall time</div><div class="v" id="statTime">—</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Before / after</h2>
+      <div class="panes">
+        <div class="pane">
+          <h3>Original</h3>
+          <canvas id="srcCanvas" width="320" height="320" aria-label="Original image"></canvas>
+        </div>
+        <div class="pane">
+          <h3>Result</h3>
+          <canvas id="outCanvas" width="320" height="320" aria-label="Filtered result"></canvas>
+        </div>
+      </div>
+      <p class="note" id="explain">Pick a filter and press Apply — or click a filter button to run it immediately.</p>
+    </section>
+
+    <div class="grid two">
+      <section class="card">
+        <h2>Convolution is not correlation</h2>
+        <p class="muted" style="margin-top:0">Almost every "convolution" in image code is correlation: the kernel slides in place, no flip. For symmetric kernels (box, Gaussian) they match. For Sobel they differ by sign — <code>correlate(sobel) == -convolve(sobel)</code>.</p>
+        <p class="muted" style="margin-bottom:0">This demo exposes both mental models in the UI notes; edges use <b>correlation</b> like the Python <code>correlate()</code> path.</p>
+      </section>
+
+      <section class="card">
+        <h2>Separable Gaussian</h2>
+        <p class="muted" style="margin-top:0">A 2D Gaussian is rank-1: two 1D passes cost O(k) per pixel instead of O(k²). The kernel line counts above show the speed-up for the current σ.</p>
+        <p class="muted" style="margin-bottom:0">Padding reflects (not zeros), so edges do not invent a black frame for the detector to find.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>What each filter does</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Filter</th><th>Arithmetic</th></tr></thead>
+          <tbody>
+            <tr><td>Grayscale</td><td><code>0.2126R + 0.7152G + 0.0722B</code> (Rec. 709, not average)</td></tr>
+            <tr><td>Gaussian blur</td><td>separable 1D passes, radius = ⌈3σ⌉</td></tr>
+            <tr><td>Median 3×3</td><td>neighbourhood median — kills salt &amp; pepper</td></tr>
+            <tr><td>Sharpen</td><td><code>I − strength · Laplacian(I)</code></td></tr>
+            <tr><td>Sobel edges</td><td>‖∇I‖ via 3×3 correlate with sobel-x / sobel-y</td></tr>
+            <tr><td>Canny-style</td><td>blur → gradients → non-max suppression → hysteresis</td></tr>
+            <tr><td>Otsu</td><td>maximise between-class variance; mid of tied range</td></tr>
+            <tr><td>Equalise</td><td>CDF stretch over 256 bins</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>42 tests · Python 3.10–3.12 · sample images from a fixed seed · Built by <a href="https://github.com/umer-78">Umer Hashmi</a></footer>
+  </div>
+
+  <script>
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const LUMA = [0.2126, 0.7152, 0.0722];
+
+    // ---- Image data as Float32 planar-ish RGBA ----
+    // Image = { w, h, data: Float32Array length w*h*4 } values 0..255
+
+    function mulberry32(a) {
+      return function() {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function makeSample(w, h, seed = 42) {
+      const data = new Float32Array(w * h * 4);
+      const rng = mulberry32(seed);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          // sky gradient
+          let r = 70 + (y / h) * 60;
+          let g = 120 + (y / h) * 40;
+          let b = 200 - (y / h) * 50;
+          // sun
+          const sun = Math.hypot(x - w * 0.78, y - h * 0.22);
+          if (sun < w * 0.1) { r = 255; g = 230; b = 80; }
+          // ground
+          if (y > h * 0.62) { r = 60 + (y / h) * 30; g = 140; b = 70; }
+          // red square
+          if (x > w * 0.15 && x < w * 0.4 && y > h * 0.35 && y < h * 0.6) { r = 220; g = 50; b = 50; }
+          // blue circle
+          if (Math.hypot(x - w * 0.55, y - h * 0.5) < w * 0.12) { r = 40; g = 90; b = 230; }
+          // triangle-ish diamond
+          if (Math.abs(x - w * 0.3) + Math.abs(y - h * 0.78) < w * 0.1) { r = 250; g = 200; b = 40; }
+          // slight grain
+          const n = (rng() - 0.5) * 6;
+          data[i] = clamp(r + n);
+          data[i + 1] = clamp(g + n);
+          data[i + 2] = clamp(b + n);
+          data[i + 3] = 255;
+        }
+      }
+      return { w, h, data };
+    }
+
+    function addSaltPepper(img, amount = 0.04) {
+      const rng = mulberry32(7);
+      const out = clone(img);
+      for (let p = 0; p < img.w * img.h; p++) {
+        const t = rng();
+        if (t < amount / 2) {
+          out.data[p * 4] = out.data[p * 4 + 1] = out.data[p * 4 + 2] = 0;
+        } else if (t < amount) {
+          out.data[p * 4] = out.data[p * 4 + 1] = out.data[p * 4 + 2] = 255;
+        }
+      }
+      return out;
+    }
+
+    function clone(img) {
+      return { w: img.w, h: img.h, data: img.data.slice() };
+    }
+    function clamp(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+    function toGray(img) {
+      const out = new Float32Array(img.w * img.h);
+      for (let p = 0; p < img.w * img.h; p++) {
+        out[p] = LUMA[0] * img.data[p * 4] + LUMA[1] * img.data[p * 4 + 1] + LUMA[2] * img.data[p * 4 + 2];
+      }
+      return { w: img.w, h: img.h, data: out };
+    }
+
+    function grayToImg(g) {
+      const data = new Float32Array(g.w * g.h * 4);
+      for (let p = 0; p < g.w * g.h; p++) {
+        const v = clamp(g.data[p]);
+        data[p * 4] = data[p * 4 + 1] = data[p * 4 + 2] = v;
+        data[p * 4 + 3] = 255;
+      }
+      return { w: g.w, h: g.h, data };
+    }
+
+    // Reflect pad helper: index into padded coordinates
+    function refl(i, n) {
+      if (i < 0) return -i - 1 < n ? -i - 1 : 0;
+      if (i >= n) return 2 * n - i - 2 >= 0 ? 2 * n - i - 2 : n - 1;
+      return i;
+    }
+
+    // Correlate a single-channel image with a kernel (odd size), reflect padding
+    function correlateGray(gray, kernel) {
+      const { w, h } = gray;
+      const k = kernel; // flat array, ks x ks
+      const ks = Math.round(Math.sqrt(k.length));
+      const half = ks >> 1;
+      const out = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let sum = 0;
+          for (let ky = -half; ky <= half; ky++) {
+            const yy = refl(y + ky, h);
+            for (let kx = -half; kx <= half; kx++) {
+              const xx = refl(x + kx, w);
+              sum += gray.data[yy * w + xx] * k[(ky + half) * ks + (kx + half)];
+            }
+          }
+          out[y * w + x] = sum;
+        }
+      }
+      return { w, h, data: out };
+    }
+
+    function gaussian1d(sigma) {
+      const radius = Math.max(1, Math.ceil(3 * sigma));
+      const size = 2 * radius + 1;
+      const line = new Float32Array(size);
+      let sum = 0;
+      for (let i = 0; i < size; i++) {
+        const x = i - radius;
+        line[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+        sum += line[i];
+      }
+      for (let i = 0; i < size; i++) line[i] /= sum;
+      return line;
+    }
+
+    function convolveSeparableGray(gray, row, col) {
+      // horizontal: row as 1×n kernel
+      const { w, h } = gray;
+      const halfR = (row.length - 1) >> 1;
+      const halfC = (col.length - 1) >> 1;
+      const tmp = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let s = 0;
+          for (let i = 0; i < row.length; i++) s += gray.data[y * w + refl(x + i - halfR, w)] * row[i];
+          tmp[y * w + x] = s;
+        }
+      }
+      const out = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let s = 0;
+          for (let i = 0; i < col.length; i++) s += tmp[refl(y + i - halfC, h) * w + x] * col[i];
+          out[y * w + x] = s;
+        }
+      }
+      return { w, h, data: out };
+    }
+
+    function gaussianBlur(img, sigma) {
+      const gray = toGray(img);
+      const line = gaussian1d(sigma);
+      const blurred = convolveSeparableGray(gray, line, line);
+      return grayToImg(blurred);
+    }
+
+    function gaussianBlurRGB(img, sigma) {
+      // blur each channel with separable passes
+      const { w, h } = img;
+      const line = gaussian1d(sigma);
+      const half = (line.length - 1) >> 1;
+      const tmp = new Float32Array(img.data.length);
+      const out = new Float32Array(img.data.length);
+      for (let c = 0; c < 3; c++) {
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            let s = 0;
+            for (let i = 0; i < line.length; i++) s += img.data[(y * w + refl(x + i - half, w)) * 4 + c] * line[i];
+            tmp[(y * w + x) * 4 + c] = s;
+          }
+        }
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            let s = 0;
+            for (let i = 0; i < line.length; i++) s += tmp[(refl(y + i - half, h) * w + x) * 4 + c] * line[i];
+            out[(y * w + x) * 4 + c] = s;
+          }
+        }
+      }
+      for (let p = 0; p < w * h; p++) out[p * 4 + 3] = 255;
+      return { w, h, data: out };
+    }
+
+    function medianFilter(img, size = 3) {
+      const { w, h } = img;
+      const half = size >> 1;
+      const out = new Float32Array(img.data.length);
+      const win = new Float32Array(size * size);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          for (let c = 0; c < 3; c++) {
+            let n = 0;
+            for (let ky = -half; ky <= half; ky++) {
+              const yy = refl(y + ky, h);
+              for (let kx = -half; kx <= half; kx++) {
+                win[n++] = img.data[(yy * w + refl(x + kx, w)) * 4 + c];
+              }
+            }
+            // insertion sort small array
+            for (let i = 1; i < n; i++) {
+              const v = win[i];
+              let j = i - 1;
+              while (j >= 0 && win[j] > v) { win[j + 1] = win[j]; j--; }
+              win[j + 1] = v;
+            }
+            out[(y * w + x) * 4 + c] = win[n >> 1];
+          }
+          out[(y * w + x) * 4 + 3] = 255;
+        }
+      }
+      return { w, h, data: out };
+    }
+
+    function convolveRGB(img, kernel) {
+      const { w, h } = img;
+      const ks = Math.round(Math.sqrt(kernel.length));
+      const half = ks >> 1;
+      const out = new Float32Array(img.data.length);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          for (let c = 0; c < 3; c++) {
+            let sum = 0;
+            for (let ky = -half; ky <= half; ky++) {
+              const yy = refl(y + ky, h);
+              for (let kx = -half; kx <= half; kx++) {
+                const xx = refl(x + kx, w);
+                sum += img.data[(yy * w + xx) * 4 + c] * kernel[(ky + half) * ks + (kx + half)];
+              }
+            }
+            out[(y * w + x) * 4 + c] = sum;
+          }
+          out[(y * w + x) * 4 + 3] = 255;
+        }
+      }
+      return { w, h, data: out };
+    }
+
+    function laplacian() { return [0, 1, 0, 1, -4, 1, 0, 1, 0]; }
+
+    function sharpenImage(img, strength = 1.0) {
+      const lap = convolveRGB(img, laplacian());
+      const out = new Float32Array(img.data.length);
+      for (let i = 0; i < img.data.length; i += 4) {
+        out[i] = clamp(img.data[i] - strength * lap.data[i]);
+        out[i + 1] = clamp(img.data[i + 1] - strength * lap.data[i + 1]);
+        out[i + 2] = clamp(img.data[i + 2] - strength * lap.data[i + 2]);
+        out[i + 3] = 255;
+      }
+      return { w: img.w, h: img.h, data: out };
+    }
+
+    function sobelX() { return [-1, 0, 1, -2, 0, 2, -1, 0, 1]; }
+    function sobelY() { return [-1, -2, -1, 0, 0, 0, 1, 2, 1]; }
+
+    function gradients(gray) {
+      const gx = correlateGray(gray, sobelX());
+      const gy = correlateGray(gray, sobelY());
+      const mag = new Float32Array(gray.w * gray.h);
+      const dir = new Float32Array(gray.w * gray.h);
+      for (let i = 0; i < mag.length; i++) {
+        mag[i] = Math.hypot(gx.data[i], gy.data[i]);
+        dir[i] = Math.atan2(gy.data[i], gx.data[i]);
+      }
+      return { w: gray.w, h: gray.h, mag, dir };
+    }
+
+    function nonMaxSuppression(mag, dir, w, h) {
+      const out = new Float32Array(w * h);
+      const angle = new Float32Array(w * h);
+      for (let i = 0; i < angle.length; i++) {
+        let a = (dir[i] * 180 / Math.PI) % 180;
+        if (a < 0) a += 180;
+        angle[i] = a;
+      }
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const i = y * w + x;
+          const a = angle[i];
+          let n1, n2;
+          if ((a < 22.5) || (a >= 157.5)) { n1 = mag[i - 1]; n2 = mag[i + 1]; }
+          else if (a < 67.5) { n1 = mag[i - w + 1]; n2 = mag[i + w - 1]; }
+          else if (a < 112.5) { n1 = mag[i - w]; n2 = mag[i + w]; }
+          else { n1 = mag[i - w - 1]; n2 = mag[i + w + 1]; }
+          if (mag[i] >= n1 && mag[i] >= n2) out[i] = mag[i];
+        }
+      }
+      return out;
+    }
+
+    function hysteresis(thin, w, h, low, high) {
+      const strong = new Uint8Array(w * h);
+      const weak = new Uint8Array(w * h);
+      const kept = new Uint8Array(w * h);
+      for (let i = 0; i < thin.length; i++) {
+        if (thin[i] >= high) { strong[i] = 1; kept[i] = 1; }
+        else if (thin[i] >= low) weak[i] = 1;
+      }
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const next = kept.slice();
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const i = y * w + x;
+            if (!weak[i] || kept[i]) continue;
+            let touch = 0;
+            for (let dy = -1; dy <= 1 && !touch; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                if (kept[(y + dy) * w + (x + dx)]) { touch = 1; break; }
+              }
+            }
+            if (touch) { next[i] = 1; changed = true; }
+          }
+        }
+        kept.set(next);
+      }
+      const out = new Float32Array(w * h);
+      for (let i = 0; i < out.length; i++) out[i] = kept[i] ? 255 : 0;
+      return out;
+    }
+
+    function sobelEdges(img) {
+      const gray = toGray(img);
+      const g = gradients(gray);
+      const out = new Float32Array(img.w * img.h);
+      const peak = Math.max(...g.mag, 1);
+      for (let i = 0; i < out.length; i++) out[i] = clamp(g.mag[i] / peak * 255);
+      return grayToImg({ w: img.w, h: img.h, data: out });
+    }
+
+    function cannyEdges(img, sigma, lowF, highF) {
+      const gray0 = toGray(img);
+      const line = gaussian1d(sigma);
+      const smoothed = convolveSeparableGray(gray0, line, line);
+      const g = gradients(smoothed);
+      const thin = nonMaxSuppression(g.mag, g.dir, img.w, img.h);
+      let peak = 0;
+      for (let i = 0; i < thin.length; i++) if (thin[i] > peak) peak = thin[i];
+      if (peak === 0) peak = 1;
+      const binary = hysteresis(thin, img.w, img.h, lowF * peak, highF * peak);
+      return grayToImg({ w: img.w, h: img.h, data: binary });
+    }
+
+    function otsuThreshold(gray) {
+      const counts = new Float64Array(256);
+      let min = Infinity, max = -Infinity;
+      for (let i = 0; i < gray.data.length; i++) {
+        const v = gray.data[i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      if (max <= min) return min;
+      const bins = 256;
+      const width = (max - min) / bins;
+      for (let i = 0; i < gray.data.length; i++) {
+        let b = Math.floor((gray.data[i] - min) / width);
+        if (b >= bins) b = bins - 1;
+        if (b < 0) b = 0;
+        counts[b]++;
+      }
+      const centres = [];
+      for (let b = 0; b < bins; b++) centres.push(min + (b + 0.5) * width);
+      const total = gray.data.length;
+      let sumLow = 0, sumTotal = 0;
+      for (let b = 0; b < bins; b++) { sumTotal += counts[b] * centres[b]; }
+      let wLow = 0, best = -1, between = new Float64Array(bins);
+      for (let b = 0; b < bins; b++) {
+        wLow += counts[b];
+        sumLow += counts[b] * centres[b];
+        const wHigh = total - wLow;
+        if (wLow === 0 || wHigh === 0) { between[b] = 0; continue; }
+        const meanLow = sumLow / wLow;
+        const meanHigh = (sumTotal - sumLow) / wHigh;
+        between[b] = wLow * wHigh * (meanLow - meanHigh) ** 2;
+        if (between[b] > best) best = between[b];
+      }
+      // middle of tied range (Python uses >= best - 1e-12)
+      const tied = [];
+      for (let b = 0; b < bins; b++) if (between[b] >= best - 1e-9) tied.push(b);
+      return centres[tied[Math.floor(tied.length / 2)]];
+    }
+
+    function otsuImage(img) {
+      const gray = toGray(img);
+      const level = otsuThreshold(gray);
+      const out = new Float32Array(gray.data.length);
+      for (let i = 0; i < out.length; i++) out[i] = gray.data[i] > level ? 255 : 0;
+      return { img: grayToImg({ w: img.w, h: img.h, data: out }), level };
+    }
+
+    function equaliseImage(img) {
+      const gray = toGray(img);
+      const counts = new Float64Array(256);
+      const q = new Uint8Array(gray.data.length);
+      for (let i = 0; i < gray.data.length; i++) {
+        let v = Math.round(gray.data[i]);
+        if (v < 0) v = 0; if (v > 255) v = 255;
+        q[i] = v;
+        counts[v]++;
+      }
+      const cdf = new Float64Array(256);
+      let acc = 0;
+      for (let b = 0; b < 256; b++) { acc += counts[b]; cdf[b] = acc; }
+      const cdfMin = cdf.find(v => v > 0) || 0;
+      const denom = gray.data.length - cdfMin || 1;
+      const out = new Float32Array(gray.data.length);
+      for (let i = 0; i < out.length; i++) {
+        out[i] = (cdf[q[i]] - cdfMin) / denom * 255;
+      }
+      return grayToImg({ w: img.w, h: img.h, data: out });
+    }
+
+    function grayscaleImg(img) {
+      return grayToImg(toGray(img));
+    }
+
+    // ---- Canvas I/O ----
+    function imgToCanvas(img, canvas) {
+      canvas.width = img.w;
+      canvas.height = img.h;
+      const ctx = canvas.getContext('2d');
+      const id = ctx.createImageData(img.w, img.h);
+      for (let i = 0; i < img.w * img.h; i++) {
+        id.data[i * 4] = clamp(Math.round(img.data[i * 4]));
+        id.data[i * 4 + 1] = clamp(Math.round(img.data[i * 4 + 1]));
+        id.data[i * 4 + 2] = clamp(Math.round(img.data[i * 4 + 2]));
+        id.data[i * 4 + 3] = img.data[i * 4 + 3] < 0 ? 0 : 255;
+      }
+      ctx.putImageData(id, 0, 0);
+    }
+
+    function canvasToImg(canvas) {
+      const ctx = canvas.getContext('2d');
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = new Float32Array(id.data.length);
+      for (let i = 0; i < id.data.length; i++) data[i] = id.data[i];
+      return { w: canvas.width, h: canvas.height, data };
+    }
+
+    function fitImage(img, maxDim) {
+      const scale = Math.min(1, maxDim / Math.max(img.w, img.h));
+      if (scale >= 1) return img;
+      const w = Math.max(1, Math.round(img.w * scale));
+      const h = Math.max(1, Math.round(img.h * scale));
+      // nearest-neighbour for simplicity / speed
+      const data = new Float32Array(w * h * 4);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const sx = Math.min(img.w - 1, Math.floor(x * img.w / w));
+          const sy = Math.min(img.h - 1, Math.floor(y * img.h / h));
+          const si = (sy * img.w + sx) * 4;
+          const di = (y * w + x) * 4;
+          data[di] = img.data[si];
+          data[di + 1] = img.data[si + 1];
+          data[di + 2] = img.data[si + 2];
+          data[di + 3] = img.data[si + 3];
+        }
+      }
+      return { w, h, data };
+    }
+
+    // ---- App state ----
+    let original = makeSample(320, 320);
+    let currentFilter = 'none';
+
+    const EXPLAIN = {
+      none: 'Original pixels, untouched.',
+      grayscale: 'Rec. 709 luma: 0.2126R + 0.7152G + 0.0722B — green contributes most of perceived brightness.',
+      blur: 'Separable Gaussian: two 1D passes with reflect padding (radius = ⌈3σ⌉).',
+      median: 'Neighbourhood median per channel — a lone speck is outnumbered and disappears; a blur would smear it.',
+      sharpen: 'I − Laplacian(I): adds back the high frequencies a blur removes.',
+      sobel: 'Correlate with Sobel-x / Sobel-y, magnitude ‖∇I‖ normalised to the image peak.',
+      edges: 'blur → gradients → non-max suppression (thin to ridges) → hysteresis (two thresholds + connectivity).',
+      otsu: 'Between-class variance maximised over 256 bins; mid of the tied range, so the cut sits in the valley.',
+      equalize: 'Empirical CDF stretched across 0–255 — spreads the tones the image actually uses.'
+    };
+
+    function runFilter(name) {
+      currentFilter = name;
+      document.querySelectorAll('.filters button').forEach(b => {
+        b.classList.toggle('active', b.dataset.f === name);
+      });
+      const sigma = +$('sigma').value;
+      const low = +$('low').value;
+      const high = +$('high').value;
+      const t0 = performance.now();
+      let result = original;
+      let kernelInfo = '—', multInfo = '—';
+
+      switch (name) {
+        case 'grayscale':
+          result = grayscaleImg(original);
+          kernelInfo = 'luma weights';
+          multInfo = '3 / px';
+          break;
+        case 'blur': {
+          const line = gaussian1d(sigma);
+          const k = line.length;
+          result = gaussianBlurRGB(original, sigma);
+          kernelInfo = `${k}×1 separable (σ=${sigma})`;
+          multInfo = `${2 * k} vs ${k * k} 2D / px`;
+          break;
+        }
+        case 'median':
+          result = medianFilter(original, 3);
+          kernelInfo = '3×3 median';
+          multInfo = '9 sorts / px';
+          break;
+        case 'sharpen':
+          result = sharpenImage(original, 1.0);
+          kernelInfo = '3×3 Laplacian';
+          multInfo = '18 / px';
+          break;
+        case 'sobel':
+          result = sobelEdges(original);
+          kernelInfo = 'Sobel 3×3 ×2';
+          multInfo = '18 / px';
+          break;
+        case 'edges':
+          result = cannyEdges(original, sigma, low, high);
+          kernelInfo = `G σ=${sigma} + Sobel + NMS + hysteresis`;
+          multInfo = `${2 * gaussian1d(sigma).length} + 18 / px`;
+          break;
+        case 'otsu': {
+          const o = otsuImage(original);
+          result = o.img;
+          kernelInfo = 'histogram only';
+          multInfo = `threshold ≈ ${o.level.toFixed(1)}`;
+          break;
+        }
+        case 'equalize':
+          result = equaliseImage(original);
+          kernelInfo = 'CDF stretch';
+          multInfo = '256 bins';
+          break;
+        default:
+          result = original;
+      }
+      const ms = performance.now() - t0;
+      imgToCanvas(result, $('outCanvas'));
+      $('statFilter').textContent = name;
+      $('statKernel').textContent = kernelInfo;
+      $('statMult').textContent = multInfo;
+      $('statTime').textContent = ms.toFixed(1) + ' ms';
+      $('explain').textContent = EXPLAIN[name] || '';
+    }
+
+    function resetOriginal(img) {
+      const maxDim = +$('maxDim').value || 320;
+      original = fitImage(img, maxDim);
+      imgToCanvas(original, $('srcCanvas'));
+      runFilter(currentFilter);
+    }
+
+    // events
+    document.querySelectorAll('.filters button').forEach(btn => {
+      btn.addEventListener('click', () => runFilter(btn.dataset.f));
+    });
+    $('applyBtn').addEventListener('click', () => runFilter(currentFilter));
+    $('sigma').addEventListener('input', () => {
+      $('sigmaVal').textContent = (+$('sigma').value).toFixed(1);
+      if (currentFilter === 'blur' || currentFilter === 'edges') runFilter(currentFilter);
+    });
+    $('low').addEventListener('input', () => {
+      $('lowVal').textContent = (+$('low').value).toFixed(2);
+      if (currentFilter === 'edges') runFilter(currentFilter);
+    });
+    $('high').addEventListener('input', () => {
+      $('highVal').textContent = (+$('high').value).toFixed(2);
+      if (currentFilter === 'edges') runFilter(currentFilter);
+    });
+    $('sampleBtn').addEventListener('click', () => {
+      resetOriginal(makeSample(320, 320, (Math.random() * 1e9) | 0));
+    });
+    $('noiseBtn').addEventListener('click', () => {
+      original = addSaltPepper(original, 0.05);
+      imgToCanvas(original, $('srcCanvas'));
+      runFilter(currentFilter);
+    });
+    $('maxDim').addEventListener('change', () => {
+      resetOriginal(makeSample(640, 640, 42));
+    });
+    $('fileIn').addEventListener('change', e => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = im.naturalWidth;
+        c.height = im.naturalHeight;
+        c.getContext('2d').drawImage(im, 0, 0);
+        resetOriginal(canvasToImg(c));
+        URL.revokeObjectURL(url);
+      };
+      im.src = url;
+    });
+
+    // boot
+    resetOriginal(makeSample(320, 320));
+  </script>
+</body>
+</html>
