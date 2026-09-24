@@ -1,5 +1,9 @@
 # imgkit
 
+[![CI](https://github.com/umer-78/image-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/umer-78/image-toolkit/actions/workflows/ci.yml)
+
+**Live demo:** https://umer-78.github.io/image-toolkit/
+
 Image processing written out: 2D convolution, Gaussian and median filters, Otsu
 thresholding and Canny-style edge detection. NumPy holds the arrays and Pillow
 decodes the files; every operation in between is implemented here.
