@@ -7,3 +7,5 @@ build/
 dist/
 .venv/
 out.png
+
+.DS_Store
