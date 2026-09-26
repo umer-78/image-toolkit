@@ -1,4 +1,4 @@
-# imgkit
+# imgkit: image processing from scratch
 
 [![CI](https://github.com/umer-78/image-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/umer-78/image-toolkit/actions/workflows/ci.yml)
 

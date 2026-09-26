@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "imgkit"
+name = "image-toolkit"
 version = "1.0.0"
-description = "Image processing from scratch: convolution, Gaussian and median filters, Otsu thresholding and Canny-style edge detection."
+description = "Image processing from scratch in NumPy: convolution, separable Gaussian, median filter, Otsu thresholding and Canny-style edge detection."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Umer Hashmi" }]
