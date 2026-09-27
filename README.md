@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/umer-78/image-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/umer-78/image-toolkit/actions/workflows/ci.yml)
 
+[![Image Toolkit: the live demo](.github/preview.jpg)](https://umer-78.github.io/image-toolkit/)
+
 **Live demo:** https://umer-78.github.io/image-toolkit/
 
 Image processing written out: 2D convolution, Gaussian and median filters, Otsu
